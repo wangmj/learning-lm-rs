@@ -71,25 +71,78 @@ pub fn masked_softmax(y: &mut Tensor<f32>) {
 }
 
 pub fn rms_norm(y: &mut Tensor<f32>, x: &Tensor<f32>, w: &Tensor<f32>, epsilon: f32) {
-    todo!("实现 rms_norm，计算前做一些必要的检查会帮助你后续调试")
+    //输出张量和输入张量的形状必须一样
+    assert!(x.shape().eq(y.shape()));
+    //获取有几列数据
+    assert!(x.shape().len() > 0);
+    let dim = x.shape()[x.shape().len() - 1];
+    let batch = x.size() / dim;
+    for b in 0..batch {
+        let start = b * dim;
+        let end = start + dim;
+        //该行均值，该版本中不适用
+        //  let avg = x.data()[start..end].iter().sum::<f32>() / (dim as f32);
+
+        //该行方差（平方的和的平均值，再开平方）
+        let fc = x.data()[start..end].iter().map(|x| square(*x)).sum::<f32>() / (dim as f32);
+        let fc = fc.sqrt();
+        // dbg!(avg, fc);
+        for i in start..end {
+            let wi = i % dim;
+            unsafe {
+                y.data_mut()[i] = x.data()[i] * w.data()[wi] / fc;
+            }
+        }
+    }
+
+    y.print();
 }
 
+fn square<T: std::ops::Mul<Output = T> + Copy>(x: T) -> T {
+    x * x
+}
 // y = silu(x) * y
 // hint: this is an element-wise operation
 pub fn swiglu(y: &mut Tensor<f32>, x: &Tensor<f32>) {
-    // let len = y.size();
-    // assert!(len == x.size());
+    let len = y.size();
+    assert!(len == x.size());
 
-    // let _y = unsafe { y.data_mut() };
-    // let _x = x.data();
+    let _y = unsafe { y.data_mut() };
+    let _x = x.data();
 
-    todo!("实现 silu，这里给了一些前期准备工作的提示，你可以参考")
+    for i in 0..len {
+        _y[i] = _y[i] * _x[i] / (1. + ((-_x[i]).exp()))
+    }
 }
 
 // C = beta * C + alpha * A @ B^T
 // hint: You don't need to do an explicit transpose of B
 pub fn matmul_transb(c: &mut Tensor<f32>, beta: f32, a: &Tensor<f32>, b: &Tensor<f32>, alpha: f32) {
-    todo!("实现 matmul_transb，计算前做一些必要的检查会帮助你后续调试");
+    // todo!("实现 matmul_transb，计算前做一些必要的检查会帮助你后续调试");
+    assert!(c.shape().len() == 2, "C 必须是二维矩阵");
+    assert!(a.shape().len() == 2, "A 必须是二维矩阵");
+    assert!(b.shape().len() == 2, "B 必须是二维矩阵");
+    assert!(c.shape()[0] == a.shape()[0], "C 的行数必须等于 A 的行数");
+    assert!(c.shape()[1] == b.shape()[0], "C 的列数必须等于 B 的行数");
+    assert!(a.shape()[1] == b.shape()[1], "A 的列数必须等于 B 的列数");
+
+    let m = c.shape()[0]; 
+    let n = c.shape()[1]; 
+    let k = a.shape()[1]; 
+
+    let a_data = a.data();
+    let b_data = b.data();
+    let c_data = unsafe { c.data_mut() };
+
+    for i in 0..m {
+        for j in 0..n {
+            let mut sum = 0.0;
+            for p in 0..k {
+                sum += a_data[i * k + p] * b_data[j * k + p];
+            }
+            c_data[i * n + j] = alpha * sum + beta * c_data[i * n + j];
+        }
+    }
 }
 
 // Dot product of two tensors (treated as vectors)
